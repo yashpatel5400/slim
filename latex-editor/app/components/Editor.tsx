@@ -3,31 +3,17 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Document, getDocument, saveDocument, getDefaultDocument } from '../services/documentService';
 
-// Use a simple textarea for now to ensure text visibility
-const SimpleEditor = dynamic(
-  () => Promise.resolve(({ value, onChange, style, ...props }: any) => (
-    <textarea
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      style={{
-        width: '100%',
-        height: '100%',
-        padding: '16px',
-        border: 'none',
-        outline: 'none',
-        resize: 'none',
-        fontFamily: '\'Fira Code\', \'Fira Mono\', monospace',
-        fontSize: '14px',
-        lineHeight: '1.5',
-        backgroundColor: '#fff',
-        color: '#000000',
-        ...style
-      }}
-      {...props}
-      className="text-black"
-    />
-  )),
-  { ssr: false }
+// Import the new LaTeX editor
+const LatexEditor = dynamic(
+  () => import('./LatexEditor'),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-full w-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    )
+  }
 );
 
 interface EditorProps {
@@ -198,17 +184,6 @@ export default function Editor({ documentId, onBack, isNewDocument = false }: Ed
     return () => clearTimeout(timeoutId);
   }, [content, document, isNew, saveCurrentDocument]);
 
-  // Auto-compile when content changes (with debounce)
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (content) {
-        compileLatex();
-      }
-    }, 1000);
-    
-    return () => clearTimeout(timeoutId);
-  }, [content, compileLatex]);
-
   if (!content) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -218,7 +193,7 @@ export default function Editor({ documentId, onBack, isNewDocument = false }: Ed
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100">
+    <div className="flex flex-col h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 py-3 flex justify-between items-center">
@@ -270,7 +245,7 @@ export default function Editor({ documentId, onBack, isNewDocument = false }: Ed
                   Compiling...
                 </>
               ) : (
-                'Compile'
+                'Compile PDF'
               )}
             </button>
           </div>
@@ -294,21 +269,19 @@ export default function Editor({ documentId, onBack, isNewDocument = false }: Ed
       )}
 
       {/* Main content */}
-      <main className="flex-1 overflow-hidden">
-        <div className="h-full flex">
+      <main className="flex-1 overflow-hidden bg-white">
+        <div className="h-full flex flex-col lg:flex-row">
           {/* Editor */}
-          <div className="w-1/2 h-full border-r border-gray-200 bg-white">
-            <SimpleEditor
+          <div className="w-full lg:w-1/2 h-1/2 lg:h-full border-b lg:border-b-0 lg:border-r border-gray-200 overflow-hidden">
+            <LatexEditor
               value={content}
               onChange={setContent}
-              style={{ fontFamily: 'monospace' }}
-              spellCheck={false}
-              className="h-full w-full p-4 focus:outline-none"
+              className="h-full"
             />
           </div>
           
           {/* Preview */}
-          <div className="w-1/2 h-full bg-gray-50 overflow-auto">
+          <div className="w-full lg:w-1/2 h-1/2 lg:h-full bg-gray-50 overflow-auto">
             {pdfUrl ? (
               <iframe
                 ref={previewRef}
@@ -317,13 +290,22 @@ export default function Editor({ documentId, onBack, isNewDocument = false }: Ed
                 title="PDF Preview"
               />
             ) : (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">No preview available</h3>
-                  <p className="mt-1 text-sm text-gray-500">Compile your LaTeX to see the PDF preview.</p>
+              <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+                <svg className="mx-auto h-16 w-16 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <h3 className="text-lg font-medium text-gray-900 mb-1">No Preview Available</h3>
+                <p className="text-sm text-gray-500 max-w-md">
+                  Click the "Compile PDF" button to generate a preview of your LaTeX document.
+                </p>
+                <div className="mt-6 space-y-2 text-left text-sm text-gray-600 bg-blue-50 p-4 rounded-lg max-w-md">
+                  <p className="font-medium">Quick Tips:</p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>Type <code className="bg-blue-100 px-1 rounded">\\</code> to see available LaTeX commands</li>
+                    <li>Use <code className="bg-blue-100 px-1 rounded">\\begin{'{...}'}</code> to start an environment</li>
+                    <li>Press <kbd className="px-2 py-0.5 bg-white border border-gray-200 rounded shadow-sm text-xs">Ctrl</kbd> + <kbd className="px-2 py-0.5 bg-white border border-gray-200 rounded shadow-sm text-xs">S</kbd> to save</li>
+                    <li>Click <span className="font-medium">Compile PDF</span> to update the preview</li>
+                  </ul>
                 </div>
               </div>
             )}
