@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { Document, getDocument, saveDocument, getDefaultDocument } from '../services/documentService';
 
 // Use a simple textarea for now to ensure text visibility
 const SimpleEditor = dynamic(
@@ -18,89 +20,158 @@ const SimpleEditor = dynamic(
         fontSize: '14px',
         lineHeight: '1.5',
         backgroundColor: '#fff',
+        color: '#000000',
         ...style
       }}
       {...props}
+      className="text-black"
     />
   )),
   { ssr: false }
 );
 
 interface EditorProps {
-  initialContent?: string;
+  documentId?: string;
   onBack?: () => void;
+  isNewDocument?: boolean;
 }
 
-// Define the Editor component
-export default function Editor({ initialContent = '', onBack }: EditorProps = {}) {
-  const [latexCode, setLatexCode] = useState<string>(
-    initialContent || 
-    `% Default LaTeX template with common packages and theorem environments
-\\documentclass{article}
-
-% Essential packages
-\\usepackage{amsmath}
-\\usepackage{amssymb}
-\\usepackage{float}
-\\usepackage{mathtools}
-\\usepackage{amsthm}
-\\usepackage{subcaption}
-\\usepackage{url}
-\\usepackage{bbm}
-\\usepackage{xcolor}
-\\usepackage{enumitem}
-
-% Theorem environments
-\\theoremstyle{plain}
-\\newtheorem{theorem}{Theorem}[section]
-\\newtheorem{proposition}[theorem]{Proposition}
-\\newtheorem{lemma}[theorem]{Lemma}
-\\newtheorem{corollary}[theorem]{Corollary}
-
-\\theoremstyle{definition}
-\\newtheorem{definition}[theorem]{Definition}
-\\newtheorem{assumption}[theorem]{Assumption}
-
-\\theoremstyle{remark}
-\\newtheorem{remark}[theorem]{Remark}
-\\newtheorem{example}[theorem]{Example}
-
-% Document information
-\\title{My Document}
-\\author{Your Name}
-\\date{\\today}
-
-\\begin{document}
-\\maketitle
-
-\\section{Introduction}
-Hello, \\LaTeX! This is a sample document with common mathematical environments pre-configured.
-
-\\begin{theorem}[Pythagorean Theorem]
-In a right triangle, the square of the hypotenuse is equal to the sum of the squares of the other two sides:
-\\begin{equation*}
-a^2 + b^2 = c^2
-\\end{equation*}
-\\end{theorem}
-
-\\begin{proof}
-The proof is left as an exercise for the reader.
-\\end{proof}
-
-\\section{Getting Started}
-Edit this document and click the 'Compile' button to see the PDF preview. You can use all the theorem environments and packages listed above.
-
-\\end{document}`
-  );
-  
+export default function Editor({ documentId, onBack, isNewDocument = false }: EditorProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [document, setDocument] = useState<Document | null>(null);
+  const [title, setTitle] = useState('Untitled Document');
+  const [content, setContent] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isNew, setIsNew] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string>('');
   const [isCompiling, setIsCompiling] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const compileTimeout = useRef<NodeJS.Timeout | null>(null);
   const previewRef = useRef<HTMLIFrameElement>(null);
-
-  // Use a ref to track the current PDF URL for cleanup
   const pdfUrlRef = useRef<string>('');
+
+  // Save the current document
+  const saveCurrentDocument = useCallback(async () => {
+    if (!content) return;
+    
+    setIsSaving(true);
+    try {
+      const docToSave = {
+        id: document?.id,
+        title: title || 'Untitled Document',
+        content,
+      };
+      
+      const savedDoc = saveDocument(docToSave);
+      setDocument(savedDoc);
+      setIsNew(false);
+      return savedDoc;
+    } catch (error) {
+      console.error('Error saving document:', error);
+      setError('Failed to save document');
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [content, document?.id, title]);
+
+  // Compile LaTeX to PDF
+  const compileLatex = useCallback(async () => {
+    if (!content) return;
+    
+    setIsCompiling(true);
+    setError(null);
+    
+    // Clear any existing timeout
+    if (compileTimeout.current) {
+      clearTimeout(compileTimeout.current);
+    }
+    
+    // Save the document first
+    const savedDoc = await saveCurrentDocument();
+    if (!savedDoc) {
+      setIsCompiling(false);
+      return;
+    }
+    
+    // Set a timeout to prevent rapid compilation
+    compileTimeout.current = setTimeout(async () => {
+      try {
+        const response = await fetch('/api/compile', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ content: savedDoc.content }),
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to compile LaTeX');
+        }
+        
+        const data = await response.json();
+        
+        // Create a blob URL for the PDF
+        const byteCharacters = atob(data.pdf);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'application/pdf' });
+        
+        // Clean up previous URL if it exists
+        if (pdfUrlRef.current) {
+          URL.revokeObjectURL(pdfUrlRef.current);
+        }
+        
+        const url = URL.createObjectURL(blob);
+        pdfUrlRef.current = url;
+        setPdfUrl(url);
+        
+      } catch (error) {
+        console.error('Error compiling LaTeX:', error);
+        setError('Failed to compile LaTeX. Please check your syntax.');
+      } finally {
+        setIsCompiling(false);
+      }
+    }, 500); // Small delay to prevent rapid requests
+  }, [content, saveCurrentDocument]);
+
+  // Load document on mount or when documentId changes
+  useEffect(() => {
+    // If we have a documentId, try to load the document
+    if (documentId) {
+      const doc = getDocument(documentId);
+      if (doc) {
+        setDocument(doc);
+        setTitle(doc.title);
+        setContent(doc.content);
+        setIsNew(false);
+      } else if (isNewDocument || searchParams?.get('new') === 'true') {
+        // Create new document
+        const defaultDoc = getDefaultDocument();
+        setDocument(null);
+        setTitle(defaultDoc.title);
+        setContent(defaultDoc.content);
+        setIsNew(true);
+      } else {
+        // Document not found, redirect to home
+        router.push('/home');
+      }
+    } else if (isNewDocument || searchParams?.get('new') === 'true') {
+      // Create new document without an ID
+      const defaultDoc = getDefaultDocument();
+      setDocument(null);
+      setTitle(defaultDoc.title);
+      setContent(defaultDoc.content);
+      setIsNew(true);
+    } else {
+      // No document ID and not creating new, redirect to home
+      router.push('/home');
+    }
+  }, [documentId, isNewDocument, router, searchParams]);
 
   // Clean up PDF URL on unmount
   useEffect(() => {
@@ -108,192 +179,135 @@ Edit this document and click the 'Compile' button to see the PDF preview. You ca
       if (pdfUrlRef.current) {
         URL.revokeObjectURL(pdfUrlRef.current);
       }
+      if (compileTimeout.current) {
+        clearTimeout(compileTimeout.current);
+      }
     };
   }, []);
 
-  // Compile LaTeX to PDF
-  const compileLatex = useCallback(async (code: string) => {
-    if (!code.trim()) {
-      setPdfUrl('');
-      pdfUrlRef.current = '';
-      return;
-    }
-
-    setIsCompiling(true);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/compile', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content: code }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to compile LaTeX');
+  // Auto-save after 2 seconds of inactivity
+  useEffect(() => {
+    if (!document && !isNew) return;
+    
+    const timeoutId = setTimeout(async () => {
+      if (content) {
+        await saveCurrentDocument();
       }
-      const { pdf: pdfBase64 } = await response.json();
-      
-      // Convert base64 to blob and create object URL
-      const byteCharacters = atob(pdfBase64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'application/pdf' });
-      
-      // Revoke previous URL if exists
-      if (pdfUrlRef.current) {
-        URL.revokeObjectURL(pdfUrlRef.current);
-      }
-      
-      const newPdfUrl = URL.createObjectURL(blob);
-      pdfUrlRef.current = newPdfUrl;
-      setPdfUrl(newPdfUrl);
-    } catch (err) {
-      console.error('Compilation error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to compile LaTeX');
-      setPdfUrl('');
-      pdfUrlRef.current = '';
-    } finally {
-      setIsCompiling(false);
-    }
-  }, []);
+    }, 2000);
+    
+    return () => clearTimeout(timeoutId);
+  }, [content, document, isNew, saveCurrentDocument]);
 
-  // Handle manual compilation
-  const handleCompile = useCallback(() => {
-    compileLatex(latexCode);
-  }, [latexCode, compileLatex]);
+  // Auto-compile when content changes (with debounce)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (content) {
+        compileLatex();
+      }
+    }, 1000);
+    
+    return () => clearTimeout(timeoutId);
+  }, [content, compileLatex]);
+
+  if (!content) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-100">
-      <header className="bg-blue-600 text-white p-4">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center space-x-4">
-            {onBack && (
-              <button
-                onClick={onBack}
-                className="text-white hover:bg-blue-700 p-2 rounded-full transition-colors"
-                title="Back to home"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
-                </svg>
-              </button>
+      {/* Header */}
+      <header className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
+          <div className="flex items-center">
+            <button
+              onClick={onBack}
+              className="mr-4 p-2 rounded-md text-gray-500 hover:bg-gray-100"
+              title="Back to documents"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </button>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="text-xl font-semibold text-gray-900 bg-transparent border-0 border-b-2 border-transparent focus:border-blue-500 focus:outline-none focus:ring-0"
+              placeholder="Document Title"
+            />
+            {isSaving && (
+              <span className="ml-2 text-sm text-gray-500">Saving...</span>
             )}
-            <div>
-              <h1 className="text-xl font-bold">LaTeX Editor</h1>
-              <p className="text-sm opacity-90">Type LaTeX on the left, click Compile to update the preview</p>
-            </div>
           </div>
-          <button
-            onClick={handleCompile}
-            disabled={isCompiling}
-            className="bg-white text-blue-600 px-4 py-2 rounded-md font-medium hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isCompiling ? 'Compiling...' : 'Compile'}
-          </button>
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={compileLatex}
+              disabled={isCompiling}
+              className={`px-4 py-2 rounded-md text-sm font-medium text-white ${isCompiling ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
+            >
+              {isCompiling ? 'Compiling...' : 'Compile'}
+            </button>
+          </div>
         </div>
       </header>
-      
-      <div className="flex-1 overflow-hidden flex">
-        <div className="flex w-full h-full">
-          {/* Editor Pane */}
-          <div className="w-1/2 h-full bg-white border-r border-gray-200 overflow-auto">
+
+      {/* Error message */}
+      {error && (
+        <div className="bg-red-50 border-l-4 border-red-400 p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main content */}
+      <main className="flex-1 overflow-hidden">
+        <div className="h-full flex">
+          {/* Editor */}
+          <div className="w-1/2 h-full border-r border-gray-200 bg-white">
             <SimpleEditor
-              value={latexCode}
-              onChange={(code: string) => setLatexCode(code)}
-              style={{
-                width: '100%',
-                height: '100%',
-                padding: '16px',
-                border: 'none',
-                outline: 'none',
-                resize: 'none',
-                fontFamily: '\'Fira Code\', \'Fira Mono\', monospace',
-                fontSize: '14px',
-                lineHeight: '1.5',
-                backgroundColor: '#fff',
-                color: '#000',
-              }}
+              value={content}
+              onChange={setContent}
+              style={{ fontFamily: 'monospace' }}
+              spellCheck={false}
+              className="h-full w-full p-4 focus:outline-none"
             />
           </div>
           
-          {/* Resize handle */}
-          <div className="w-2 bg-gray-200 hover:bg-blue-300 cursor-col-resize" />
-          
-          {/* Preview Pane */}
-          <div className="w-1/2 h-full overflow-auto bg-gray-100 p-4">
-            {isCompiling ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                  <p className="text-gray-600">Compiling LaTeX...</p>
-                </div>
-              </div>
-            ) : error ? (
-              <div className="text-red-500 p-4 bg-red-50 rounded">
-                <p className="font-bold">Compilation Error:</p>
-                <pre className="whitespace-pre-wrap mt-2 text-sm">{error}</pre>
-              </div>
-            ) : pdfUrl ? (
+          {/* Preview */}
+          <div className="w-1/2 h-full bg-gray-50 overflow-auto">
+            {pdfUrl ? (
               <iframe
                 ref={previewRef}
                 src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-                className="w-full h-full border border-gray-300 bg-white"
+                className="w-full h-full border-0"
                 title="PDF Preview"
               />
             ) : (
-              <div className="flex items-center justify-center h-full text-gray-500">
-                <p>Compiled PDF will appear here</p>
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No preview available</h3>
+                  <p className="mt-1 text-sm text-gray-500">Compile your LaTeX to see the PDF preview.</p>
+                </div>
               </div>
             )}
           </div>
         </div>
-      </div>
-      
-      <footer className="bg-gray-200 p-2 text-center text-sm text-gray-600">
-        LaTeX Editor - {new Date().getFullYear()}
-      </footer>
-
-      <style jsx global>{`
-        /* Basic styles for the editor container */
-        .editor-container {
-          height: 100%;
-          width: 100%;
-          overflow: auto;
-        }
-        
-        /* Ensure the iframe takes full height */
-        iframe {
-          width: 100%;
-          height: 100%;
-          border: none;
-        }
-        
-        /* Loading and error states */
-        .loading-state, .error-state {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          height: 100%;
-          padding: 20px;
-          text-align: center;
-        }
-        
-        .error-state {
-          color: #e53e3e;
-          background-color: #fff5f5;
-          border: 1px solid #fed7d7;
-          border-radius: 0.375rem;
-          padding: 1rem;
-          margin: 1rem;
-        }
-      `}</style>
+      </main>
     </div>
   );
 }

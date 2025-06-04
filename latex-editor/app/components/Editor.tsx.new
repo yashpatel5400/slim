@@ -1,0 +1,33 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
+import { Document, getDocument, saveDocument, getDefaultDocument } from '../services/documentService';
+
+// Use a simple textarea for now to ensure text visibility
+const SimpleEditor = dynamic(
+  () => Promise.resolve(({ value, onChange, style, ...props }: any) => (
+    <textarea
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      style={{
+        width: '100%',
+        height: '100%',
+        padding: '16px',
+        border: 'none',
+        outline: 'none',
+        resize: 'none',
+        fontFamily: '\'Fira Code\', \'Fira Mono\', monospace',
+        fontSize: '14px',
+        lineHeight: '1.5',
+        backgroundColor: '#fff',
+        color: '#000000',
+        ...style
+      }}
+      {...props}
+      className="text-black"
+    />
+  )),
+  { ssr: false }
+);
+
+// [Rest of the file remains the same...]
