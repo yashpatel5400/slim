@@ -111,28 +111,27 @@ const Editor = () => {
     }
   }, []);
 
-  // Debounce compilation
-  useEffect(() => {
-    if (compileTimeout.current) {
-      clearTimeout(compileTimeout.current);
-    }
-
-    compileTimeout.current = setTimeout(() => {
-      compileLatex(latexCode);
-    }, 1000);
-
-    return () => {
-      if (compileTimeout.current) {
-        clearTimeout(compileTimeout.current);
-      }
-    };
+  // Handle manual compilation
+  const handleCompile = useCallback(() => {
+    compileLatex(latexCode);
   }, [latexCode, compileLatex]);
 
   return (
     <div className="flex flex-col h-screen bg-gray-100">
       <header className="bg-blue-600 text-white p-4">
-        <h1 className="text-xl font-bold">LaTeX Editor</h1>
-        <p className="text-sm opacity-90">Type LaTeX on the left, see the PDF preview on the right</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-xl font-bold">LaTeX Editor</h1>
+            <p className="text-sm opacity-90">Type LaTeX on the left, click Compile to update the preview</p>
+          </div>
+          <button
+            onClick={handleCompile}
+            disabled={isCompiling}
+            className="bg-white text-blue-600 px-4 py-2 rounded-md font-medium hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isCompiling ? 'Compiling...' : 'Compile'}
+          </button>
+        </div>
       </header>
       
       <div className="flex-1 overflow-hidden flex">
@@ -153,6 +152,7 @@ const Editor = () => {
                 fontSize: '14px',
                 lineHeight: '1.5',
                 backgroundColor: '#fff',
+                color: '#000',
               }}
             />
           </div>
