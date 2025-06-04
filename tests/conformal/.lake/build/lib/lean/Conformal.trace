@@ -1,0 +1,25 @@
+{"log":
+ [{"message":
+   ".> LEAN_PATH=/Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal/.lake/packages/Cli/.lake/build/lib/lean:/Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal/.lake/packages/batteries/.lake/build/lib/lean:/Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal/.lake/packages/Qq/.lake/build/lib/lean:/Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal/.lake/packages/aesop/.lake/build/lib/lean:/Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal/.lake/packages/proofwidgets/.lake/build/lib/lean:/Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal/.lake/packages/importGraph/.lake/build/lib/lean:/Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal/.lake/packages/LeanSearchClient/.lake/build/lib/lean:/Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal/.lake/packages/plausible/.lake/build/lib/lean:/Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal/.lake/packages/mathlib/.lake/build/lib/lean:/Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal/.lake/build/lib/lean /Users/yppatel/.elan/toolchains/leanprover--lean4---v4.21.0-rc3/bin/lean -Dpp.unicode.fun=true -DautoImplicit=false /Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal/Conformal.lean -R /Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal -o /Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal/.lake/build/lib/lean/Conformal.olean -i /Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal/.lake/build/lib/lean/Conformal.ilean -c /Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal/.lake/build/ir/Conformal.c --json",
+   "level": "trace"}],
+ "inputs":
+ [["Conformal:deps",
+   [["deps",
+     [["conformal/Conformal:extraDep", [["@conformal:extraDep", "1723"]]],
+      ["import oleans",
+       [["Conformal.Basic:olean",
+         [["Conformal.Basic:deps", "12720339749678921893"],
+          ["/Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal/.lake/build/lib/lean/Conformal/Basic.olean",
+           "9084068564727578670"]]]]]]],
+    ["libs",
+     [["import dynlibs", "1723"],
+      ["package external libraries", "1723"],
+      ["module dynlibs", "1723"],
+      ["module plugins", "1723"]]]]],
+  ["Lean 4.21.0, commit 6741444a63eec253a7eae7a83f1beb3de015023d",
+   "11123825329739276520"],
+  ["Module.leanArgs: #[-Dpp.unicode.fun=true, -DautoImplicit=false]",
+   "2480034161766020459"],
+  ["/Users/yppatel/Documents/PhD_Year4_Summer/slim/tests/conformal/Conformal.lean",
+   "15786779250223590051"]],
+ "depHash": "4002129547098230832"}
