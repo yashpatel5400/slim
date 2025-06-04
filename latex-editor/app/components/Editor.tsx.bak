@@ -27,12 +27,13 @@ const SimpleEditor = dynamic(
 );
 
 interface EditorProps {
-  initialContent?: string;
   onBack?: () => void;
+
+  initialContent?: string;
 }
 
 // Define the Editor component
-export default function Editor({ initialContent = '', onBack }: EditorProps = {}) {
+export default function Editor({ initialContent = '' }: EditorProps = {}) {
   const [latexCode, setLatexCode] = useState<string>(
     initialContent || 
     `% Default LaTeX template with common packages and theorem environments
@@ -173,22 +174,9 @@ Edit this document and click the 'Compile' button to see the PDF preview. You ca
     <div className="flex flex-col h-screen bg-gray-100">
       <header className="bg-blue-600 text-white p-4">
         <div className="flex justify-between items-center">
-          <div className="flex items-center space-x-4">
-            {onBack && (
-              <button
-                onClick={onBack}
-                className="text-white hover:bg-blue-700 p-2 rounded-full transition-colors"
-                title="Back to home"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
-                </svg>
-              </button>
-            )}
-            <div>
-              <h1 className="text-xl font-bold">LaTeX Editor</h1>
-              <p className="text-sm opacity-90">Type LaTeX on the left, click Compile to update the preview</p>
-            </div>
+          <div>
+            <h1 className="text-xl font-bold">LaTeX Editor</h1>
+            <p className="text-sm opacity-90">Type LaTeX on the left, click Compile to update the preview</p>
           </div>
           <button
             onClick={handleCompile}
@@ -296,4 +284,4 @@ Edit this document and click the 'Compile' button to see the PDF preview. You ca
       `}</style>
     </div>
   );
-}
+};
