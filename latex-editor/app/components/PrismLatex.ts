@@ -1,11 +1,12 @@
 // This file contains the LaTeX language definition for Prism.js
 
-// Register the LaTeX language with Prism
-if (typeof window !== 'undefined' && window.Prism) {
+const registerPrismLatex = () => {
+  if (typeof window === 'undefined' || !window.Prism) return;
+  
   const Prism = window.Prism;
   
-  // Define LaTeX language
-  (Prism.languages as any).latex = {
+  // Define LaTeX language grammar
+  const latexGrammar: any = {
     'comment': /%[^\r\n]*/,
     'string': {
       pattern: /([\s\[])(\\(?:[a-z]+\*?|.)(?:\s*\[[^\]]*\])*\{[^}]*\})/i,
@@ -21,9 +22,13 @@ if (typeof window !== 'undefined' && window.Prism) {
     'punctuation': /[\[\]{}&]/
   };
 
-  // Add the LaTeX language to the list of known languages
-  Prism.languages.markup = Prism.languages.markup || {};
-  (Prism.languages.markup as any).latex = Prism.languages.latex;
-}
+  // Add the LaTeX language to Prism
+  (Prism.languages as any).latex = latexGrammar;
 
-export {};
+  // Add LaTeX to markup languages if markup exists
+  if (Prism.languages.markup) {
+    (Prism.languages.markup as any).latex = latexGrammar;
+  }
+};
+
+export default registerPrismLatex;

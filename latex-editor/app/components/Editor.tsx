@@ -4,53 +4,60 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import 'katex/dist/katex.min.css';
 
-// Type definitions
-declare global {
-  interface Window {
-    Prism?: typeof import('prismjs');
-  }
-}
-
 // Import Prism types
 import 'prismjs';
 
-type PrismToken = {
-  type: string;
-  content: string | PrismToken[];
-  alias?: string | string[];
+// Type for our custom Prism instance
+type CustomPrism = {
+  highlight: (code: string, grammar: any, language: string) => string;
+  languages: {
+    [key: string]: any;
+    markup?: any;
+    latex?: any;
+  };
 };
 
-// Import components with proper typing
-const CodeEditor = dynamic<{
-  value: string;
-  onValueChange: (code: string) => void;
-  highlight: (code: string) => Promise<string>;
-  padding: number;
-  style: React.CSSProperties;
-  className?: string;
-}>(
-  () => import('react-simple-code-editor').then(mod => mod.default),
+// Extend Prism's type declarations
+declare global {
+  interface Window {
+    Prism?: CustomPrism;
+  }
+}
+
+// Simple wrapper component for the editor
+const SimpleCodeEditor = dynamic(
+  () => import('react-simple-code-editor'),
   { ssr: false }
 );
 
-const Split = dynamic(
-  () => import('react-split').then(mod => mod.default),
+// Simple wrapper for Split component
+const SplitPane = dynamic(
+  () => import('react-split'),
   { ssr: false }
 );
 
 // Import PrismJS for syntax highlighting
-const importPrism = async () => {
-  if (typeof window !== 'undefined') {
-    const Prism = await import('prismjs');
-    // Import the LaTeX language definition
-    await import('./PrismLatex');
-    return Prism;
+const importPrism = async (): Promise<CustomPrism | null> => {
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    const Prism = (await import('prismjs')) as any;
+    // Import and register the LaTeX language
+    const registerPrismLatex = (await import('./PrismLatex')).default;
+    registerPrismLatex();
+    
+    // Return the Prism instance (handle both ESM and CJS exports)
+    return Prism.default || Prism;
+  } catch (error) {
+    console.error('Failed to load Prism:', error);
+    return null;
   }
-  return null;
 };
 
 // Import KaTeX for rendering LaTeX
-const importKatex = async () => {
+const importKatex = async (): Promise<{
+  renderToString: (formula: string, options: { throwOnError: boolean; displayMode: boolean }) => string;
+} | null> => {
   if (typeof window !== 'undefined') {
     const katex = await import('katex');
     return katex.default || katex;
@@ -92,6 +99,13 @@ There are infinitely many prime numbers.
 
 export default function Editor() {
   const [latexCode, setLatexCode] = useState(DEFAULT_LATEX);
+  const [isEditorReady, setIsEditorReady] = useState(false);
+  
+  // Initialize editor state on mount
+  useEffect(() => {
+    setIsEditorReady(true);
+    return () => setIsEditorReady(false);
+  }, []);
   const [previewHtml, setPreviewHtml] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -144,11 +158,16 @@ export default function Editor() {
               
             const displayMode = part.content.startsWith('$$') || part.content.startsWith('\\[');
             
-            if ('renderToString' in katex) {
-              html += (katex as any).renderToString(mathContent, {
-                throwOnError: false,
-                displayMode
-              });
+            if (katex?.renderToString) {
+              try {
+                html += katex.renderToString(mathContent, {
+                  throwOnError: false,
+                  displayMode
+                });
+              } catch (err) {
+                console.error('Error rendering math with KaTeX:', err);
+                html += displayMode ? `\\[${mathContent}\\]` : `\\(${mathContent}\\)`;
+              }
             } else {
               html += displayMode ? `\\[${mathContent}\\]` : `\\(${mathContent}\\)`;
             }
@@ -203,98 +222,195 @@ export default function Editor() {
 
   // Highlight LaTeX syntax
   const highlight = useCallback(async (code: string) => {
+    if (typeof window === 'undefined') return code;
+    
     try {
       const Prism = await importPrism();
-      if (Prism?.highlight) {
-        // Ensure the LaTeX language is loaded
-        if (!(Prism.languages as any).latex) {
-          await import('./PrismLatex');
-        }
-        
-        return Prism.highlight(
-          code,
-          (Prism.languages as any).latex || (Prism.languages as any).markup || {},
-          'latex'
-        );
+      if (!Prism) return code;
+      
+      // Import and register the LaTeX language if not already registered
+      if (!Prism.languages.latex) {
+        const registerPrismLatex = (await import('./PrismLatex')).default;
+        registerPrismLatex();
       }
-      return code;
+      
+      const grammar = Prism.languages.latex || Prism.languages.markup || {};
+      return Prism.highlight(code, grammar, 'latex');
     } catch (err) {
       console.error('Error highlighting code:', err);
       return code;
     }
   }, []);
 
+  // Add tabSize prop to the editor
+  const editorStyle = {
+    fontFamily: '"Fira code", "Fira Mono", monospace',
+    fontSize: '14px',
+    backgroundColor: '#f8f9fa',
+    borderRadius: '0.5rem',
+    border: '1px solid #e9ecef',
+    minHeight: '100%',
+    outline: 'none',
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-100">
-      <header className="bg-blue-600 text-white p-4 shadow-md">
-        <h1 className="text-2xl font-bold">LaTeX Editor</h1>
-        <p className="text-sm opacity-80">Type LaTeX on the left, see the preview on the right</p>
+      <header className="bg-blue-600 text-white p-4">
+        <h1 className="text-xl font-bold">LaTeX Editor</h1>
+        <p className="text-sm opacity-90">Type LaTeX on the left, see the preview on the right</p>
       </header>
       
-      <div className="flex-1 overflow-hidden">
-        <Split
-          className="split h-full"
-          sizes={[50, 50]}
-          minSize={300}
-          expandToMin={false}
-          gutterSize={10}
-          gutterAlign="center"
-          snapOffset={30}
-          dragInterval={1}
-          direction="horizontal"
-          cursor="col-resize"
-        >
-          <div className="h-full overflow-auto bg-gray-900 p-4">
-            {typeof window !== 'undefined' && CodeEditor ? (
-              <CodeEditor
-                value={latexCode}
-                onValueChange={code => setLatexCode(code)}
-                highlight={highlight}
-                padding={10}
-                style={{
-                  fontFamily: '"Fira code", "Fira Mono", monospace',
-                  fontSize: 14,
-                  minHeight: '100%',
-                  color: '#f8f8f2',
-                  backgroundColor: '#1e1e1e',
-                }}
-                className="h-full"
-              />
-            ) : (
-              <textarea
-                className="w-full h-full p-2 bg-gray-800 text-white font-mono"
-                value={latexCode}
-                onChange={(e) => setLatexCode(e.target.value)}
-              />
-            )}
+      <div className="flex-1 overflow-hidden flex">
+        <div className="flex w-full h-full">
+          {/* Editor Pane */}
+          <div className="w-1/2 h-full bg-white border-r border-gray-200 overflow-auto">
+            <div className="p-4 h-full">
+              {isLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+                </div>
+              ) : (
+                <div className="h-full">
+                  {isEditorReady && (
+                    <div className="simple-code-editor h-full">
+                      <SimpleCodeEditor
+                        value={latexCode}
+                        onValueChange={setLatexCode}
+                        highlight={highlight}
+                        padding={16}
+                        tabSize={2}
+                        insertSpaces={true}
+                        ignoreTabKey={false}
+                        style={{
+                          fontFamily: 'Fira Code, Fira Mono, monospace',
+                          fontSize: '14px',
+                          lineHeight: '1.5',
+                          height: '100%',
+                          outline: 'none',
+                        }}
+                        textareaClassName="editor-textarea"
+                        preClassName="editor-pre"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           
-          <div 
-            ref={previewRef}
-            className="h-full overflow-auto bg-white p-6 prose max-w-none"
-          >
-            {isLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-              </div>
-            ) : error ? (
+          {/* Resize handle */}
+          <div className="w-2 bg-gray-200 hover:bg-blue-300 cursor-col-resize" />
+          
+          {/* Preview Pane */}
+          <div className="w-1/2 h-full overflow-auto bg-white p-4">
+            {error ? (
               <div className="text-red-500 p-4 bg-red-50 rounded">
                 <p className="font-bold">Error:</p>
                 <p>{error}</p>
-                <p className="mt-2 text-sm">
+              </div>
+            ) : (
+              <div className="prose max-w-none">
+                <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                <p className="mt-4 text-sm text-gray-500">
                   Note: This is a basic preview. Complex LaTeX documents might not render correctly.
                 </p>
               </div>
-            ) : (
-              <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
             )}
           </div>
-        </Split>
+        </div>
       </div>
       
-      <footer className="bg-gray-800 text-white text-xs p-2 text-center">
+      <footer className="bg-gray-200 p-2 text-center text-sm text-gray-600">
+        {isLoading && <div className="inline-block mr-2">Rendering...</div>}
         LaTeX Editor - {new Date().getFullYear()}
       </footer>
+
+      <style jsx global>{`
+        .simple-code-editor {
+          position: relative;
+          height: 100%;
+          font-family: 'Fira Code', 'Fira Mono', monospace;
+          font-size: 14px;
+          line-height: 1.5;
+          color: #000;
+          background: white;
+        }
+        
+        .simple-code-editor > * {
+          margin: 0;
+          border: 0;
+          background: none;
+          box-sizing: border-box;
+          font-family: inherit;
+          font-size: inherit;
+          line-height: inherit;
+          tab-size: 2;
+          white-space: pre !important;
+        }
+        
+        .editor-textarea {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          padding: 16px;
+          resize: none;
+          color: inherit;
+          caret-color: #000;
+          z-index: 1;
+          outline: none;
+          overflow: auto;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+          white-space: pre !important;
+        }
+        
+        .editor-pre {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          padding: 16px;
+          pointer-events: none;
+          overflow: visible;
+          z-index: 0;
+          white-space: pre !important;
+        }
+        
+        .editor-pre code {
+          display: block;
+          font-family: inherit;
+          font-size: inherit;
+          line-height: inherit;
+          white-space: pre !important;
+          background: transparent;
+          color: transparent;
+        }
+        
+        /* Show only the syntax highlighted parts */
+        .editor-pre code .token {
+          color: inherit !important;
+        }
+        
+        /* Hide the raw HTML tags */
+        .editor-pre code .token.tag,
+        .editor-pre code .token.punctuation {
+          color: transparent !important;
+        }
+        
+        /* Syntax highlighting colors */
+        .token.keyword { color: #7c4dff; }
+        .token.string { color: #39b54a; }
+        .token.comment { color: #9e9e9e; font-style: italic; }
+        .token.function { color: #00bcd4; }
+        .token.operator { color: #666; }
+        .token.punctuation { color: #555; }
+        .token.selector { color: #e53935; }
+        .token.attr-name { color: #ff6f00; }
+        .token.attr-value { color: #39b54a; }
+      `}</style>
     </div>
   );
 }
