@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "QEDitor",
-  description: "A LaTeX editor with live preview",
+  description: "A LaTeX editor with formal verification",
 };
 
 export default function RootLayout({

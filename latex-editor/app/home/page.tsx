@@ -96,7 +96,7 @@ export default function HomePage() {
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-10">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">QEDitor</h1>
-          <p className="text-gray-600">A modern LaTeX editor with live preview and collaboration features</p>
+          <p className="text-gray-600">A LaTeX editor with formal verification</p>
         </div>
         
         <div className="flex justify-end mb-6">
