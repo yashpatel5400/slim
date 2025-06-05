@@ -5,7 +5,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "LaTeX Editor",
+  title: "QEDitor",
   description: "A LaTeX editor with live preview",
 };
 

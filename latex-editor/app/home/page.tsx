@@ -95,8 +95,8 @@ export default function HomePage() {
     <div className="min-h-screen bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">LaTeX Editor</h1>
-          <p className="text-gray-600">Create, edit, and manage your LaTeX documents</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">QEDitor</h1>
+          <p className="text-gray-600">A modern LaTeX editor with live preview and collaboration features</p>
         </div>
         
         <div className="flex justify-end mb-6">
