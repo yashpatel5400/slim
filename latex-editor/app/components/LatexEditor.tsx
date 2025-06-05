@@ -5,6 +5,8 @@ import Editor from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 
 interface LatexEditorProps {
+  theme?: "light" | "vs-dark";
+  
   value: string;
   onChange: (value: string) => void;
   className?: string;
@@ -49,12 +51,12 @@ const getLatexCompletions = (): any[] => {
   }));
 };
 
-export default function LatexEditor({ value, onChange, className = '' }: LatexEditorProps) {
+export default function LatexEditor({  value, onChange, className = '' , theme = "light" }: LatexEditorProps) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const [isEditorReady, setIsEditorReady] = useState(false);
 
   // Handle editor mount
-  const handleEditorDidMount = (editor: editor.IStandaloneCodeEditor) => {
+  const handleEditorDidMount = (editor: editor.IStandaloneCodeEditor, monacoInstance: any) => {
     editorRef.current = editor;
     setIsEditorReady(true);
     
@@ -63,7 +65,7 @@ export default function LatexEditor({ value, onChange, className = '' }: LatexEd
     
     // Set up custom commands and keybindings
     editor.addCommand(
-      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
+      monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS,
       () => {
         // Save functionality can be handled by parent
         document.dispatchEvent(new KeyboardEvent('keydown', {
@@ -77,7 +79,7 @@ export default function LatexEditor({ value, onChange, className = '' }: LatexEd
 
   // Set up LaTeX language support
   useEffect(() => {
-    if (isEditorReady && window.monaco) {
+    if (isEditorReady && typeof window !== "undefined" && window.monaco) {
       // Register a new language for LaTeX
       monaco.languages.register({ id: 'latex' });
       
@@ -178,7 +180,14 @@ export default function LatexEditor({ value, onChange, className = '' }: LatexEd
     return () => {
       // Cleanup if needed
     };
-  }, [isEditorReady]);
+  }, [isEditorReady, theme]);
+
+  // Update theme when it changes
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.monaco) {
+      window.monaco.editor.setTheme(theme);
+    }
+  }, [theme]);
 
   return (
     <div className={`h-full w-full ${className}`}>
@@ -187,7 +196,7 @@ export default function LatexEditor({ value, onChange, className = '' }: LatexEd
         defaultLanguage="latex"
         value={value}
         onChange={(value) => onChange(value || '')}
-        onMount={handleEditorDidMount}
+        onMount={(editor, monaco) => handleEditorDidMount(editor, monaco)}
         options={{
           minimap: { enabled: false },
           fontSize: 14,
@@ -202,7 +211,7 @@ export default function LatexEditor({ value, onChange, className = '' }: LatexEd
           formatOnPaste: true,
           formatOnType: true,
           tabSize: 2,
-          theme: 'vs-light',
+          theme: theme,
         }}
       />
     </div>
